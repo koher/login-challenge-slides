@@ -271,3 +271,260 @@ public func loadUser() async {
 
 ---
 
+![fit](img/loading-user-state.png)
+
+---
+
+## 状態遷移をわかりやすく
+
+```swift
+private enum LoadingUserState {
+    case waiting
+    case loading
+    case failure(Error)
+}
+```
+
+各状態を `enum` の `case` で表現する。
+
+---
+
+## 状態遷移をわかりやすく
+
+```swift
+private enum LoadingUserState {
+    ...
+    mutating func startLoading() {
+        guard case .waiting = self else {
+            assertionFailure()
+            return
+        }
+        self = .loading
+    }
+}
+```
+
+状態遷移を `enum` のメソッドで表現する。
+
+---
+
+## 状態遷移をわかりやすく
+
+```swift
+private enum LoadingUserState {
+    ...
+    mutating func startLoading() { ... }
+    mutating func finishLoading() { ... }
+    mutating func failLoading(with error: Error) { ... }
+    mutating func clearError() { ... }
+}
+```
+
+状態遷移の矢印それぞれに対応したメソッドを実装する。
+
+---
+
+![fit](img/loading-user-state-2.png)
+
+---
+
+## 状態遷移をわかりやすく (Before)
+
+```swift
+public final class HomeViewState: ObservableObject {
+    @Published public private(set)
+        var isLoadingUser: Bool = false
+    ...
+    @Published public
+        var presentsNetworkErrorAlert: Bool = false
+    @Published public
+        var presentsServerErrorAlert: Bool = false
+    ...
+}
+```
+
+ロードの状態が様々なプロパティに分散して扱われている。
+
+---
+
+## 状態遷移をわかりやすく (After)
+
+```swift
+public final class HomeViewState: ObservableObject {
+    @Published private var loadingUserState:
+        LoadingUserState = .waiting
+    ...
+}
+```
+
+`loadingUserState` で一元的に状態を管理する。内部的な状態なので `private` にする。
+
+---
+
+## 状態遷移をわかりやすく (After)
+
+```swift
+public final class HomeViewState: ObservableObject {
+    ...
+    public var isLoadingUser: Bool {
+        guard case .loading = loadingUserState else {
+            return false
+        }
+        return true
+    }
+    ...
+}
+```
+
+各プロパティは `loadingUserState` を使って実装する。
+
+---
+
+## 状態遷移をわかりやすく (After)
+
+```swift
+public final class HomeViewState: ObservableObject {
+    ...
+    public var presentsNetworkErrorAlert: Bool {
+        get {
+            guard case .failure(is NetworkError)
+                = loadingUserState else { return false }
+            return true
+        }
+        set { loadingUserState.clearError() }
+    }
+    ...
+}
+```
+
+---
+
+## 状態遷移をわかりやすく (Before)
+
+```swift
+public func loadUser() async {
+    // 処理が二重に実行されるのを防ぐ。
+    if isLoadingUser { return }
+    // 処理中はリロードボタン押下を受け付けない。
+    isLoadingUser = true
+    ...
+}
+```
+
+以前は各プロパティを直接変更していた。
+
+---
+
+## 状態遷移をわかりやすく (After)
+
+```swift
+public func loadUser() async {
+    // 処理が二重に実行されるのを防ぐ。
+    if isLoadingUser { return }
+    // 処理中はリロードボタン押下を受け付けない。
+    loadingUserState.startLoading()
+    ...
+}
+```
+
+`loadingUserState` で一元的に状態遷移を管理する。メソッド経由で状態遷移させるので不正な遷移が起こらない。
+
+---
+
+## 依存関係をわかりやすく
+
+---
+
+![fit](img/modules-1.png)
+
+---
+
+## 依存関係をわかりやすく
+
+ViewModel 的なクラス（ `HomeViewState` など）は View とは別モジュールに切り出したい。
+
+- 依存関係が最小限に整理されていると、登場人物が少なくコードの見通しが良くなる
+- ロジックを扱うモジュールを分離しておくと、そこだけビルドして高速にテストを実行可能
+
+---
+
+![fit](img/modules-2.png)
+
+---
+
+![inline 200%](img/modules-xcode.png)
+
+---
+
+## 依存関係をわかりやすく
+
+```swift
+let package = Package(
+    name: "UseCases",
+    ...
+    dependencies: [
+        .package(path: "../Entities"),
+        ...
+    ],
+    ...
+)
+```
+
+依存関係を Package.swift に記述する。
+
+---
+
+![fit](img/modules-2.png)
+
+---
+
+## 依存関係をわかりやすく
+
+`HomeViewState` は `UserService` や `AuthService` を利用しており、それらは `APIServices` モジュールが提供している。
+
+---
+
+![fit](img/modules-3.png)
+
+---
+
+## 依存関係をわかりやすく
+
+`UseCases` モジュールが `APIServices` モジュールに依存するのは望ましくない。
+
+- `UseCases` が純粋なロジックの世界でなくなる
+    - テストしづらい
+
+---
+
+![fit](img/clean-architecture.jpg)
+
+---
+
+![fit](img/modules-3.png)
+
+---
+
+![fit](img/modules-4.png)
+
+---
+
+## 依存関係逆転の原則
+### Dependency Inversion Principle (DIP)
+
+---
+
+![fit](img/modules-3.png)
+
+---
+
+![fit](img/modules-4.png)
+
+---
+
+## 依存性の注入
+### Dependency Injection (DI)
+
+---
+
+
