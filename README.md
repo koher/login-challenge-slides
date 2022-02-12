@@ -683,3 +683,348 @@ public enum UserService: UserServiceProtocol {
 
 ---
 
+## 単体テストの導入
+
+---
+
+## 単体テストの導入
+
+DIP によって `UseCases` モジュールが純粋なロジックの世界になったので、単体テストを簡単に記述できる。
+
+---
+
+## 単体テストの導入
+
+```swift
+import XCTest
+import UseCases
+import Entities
+
+@MainActor
+final class HomeViewStateTests: XCTestCase {
+    ...
+}
+```
+
+`UseCases` のテストモジュールに `HomeViewStateTests` を追加する。
+
+---
+
+## 単体テストの導入
+
+```swift
+import XCTest
+import UseCases
+import Entities
+
+@MainActor
+final class HomeViewStateTests: XCTestCase {
+    func testLoadUser() async { ... }
+    ...
+}
+```
+
+ここでは `loadUser` メソッドのテストを取り上げる。
+
+---
+
+## XCTest の構造化
+
+```swift
+final class FooTests: XCTestCase {
+    func testFooSuccess() { ... }
+    func testFooFailure() { ... }
+}
+```
+
+昔（ Xcode 8 まで）はテストケースをフラットに記述していた。
+
+---
+
+## XCTest の構造化
+
+```swift
+final class FooTests: XCTestCase {
+    func testFoo() {
+        XCTContext.runActivity(named: "成功") { _ in
+            ...
+        }
+        XCTContext.runActivity(named: "失敗") { _ in
+            ...
+        }
+    }
+}
+```
+
+`XCTContext.runActivity` でテストケースを構造化可に。
+
+---
+
+## XCTest の構造化
+
+```swift
+final class FooTests: XCTestCase {
+    func testFoo() async { // OK
+        await bar() // OK
+        XCTContext.runActivity(named: "成功") { _ in
+            await baz() // NG 😭
+        }
+    }
+}
+```
+
+しかし、 `async/await` に対応していない。
+
+---
+
+## XCTest の構造化
+
+```swift
+extension XCTContext {
+    @MainActor
+    static func runActivityAsync<Result>(named name: String,
+            block: @escaping (XCTActivity) async -> Result) async -> Result {
+        await withCheckedContinuation { continuation in
+            let _: Void = runActivity(named: name, block: { activity in
+                Task {
+                    let result = await block(activity)
+                    continuation.resume(returning: result)
+                }
+            })
+        }
+    }
+}
+```
+
+仕方がないので自作する。
+
+---
+
+## 単体テストの導入
+
+```swift
+func testLoadUser() async {
+    await XCTContext.runActivityAsync(named: "成功") { _ in
+        ...
+    }
+
+    await XCTContext.runActivityAsync(named: "失敗") { _ in
+        ...
+    }
+}
+```
+
+成功と失敗のケースに分けて `testLoadUser` を実装していく。
+
+---
+
+## 単体テストの導入
+
+```swift
+func testLoadUser() async {
+    await XCTContext.runActivityAsync(named: "成功") { _ in
+        let state: HomeViewState<UserService>
+            = .init(dismiss: {})
+        ...
+    }
+    ...
+}
+```
+
+まずは `state` を作る。が、この `UserService` は何者？
+
+---
+
+## 単体テストの導入
+
+```swift
+private enum UserService: UserServiceProtocol {
+    static private(set) var currentUserContinuation:
+        CheckedContinuation<User, Error>?
+    
+    static func currentUser() async throws -> User {
+        try await withCheckedThrowingContinuation { continuation in
+            currentUserContinuation = continuation
+        }
+    }
+}
+```
+
+テスト用の `UserService` を実装。外から Continuation に任意の結果を与えられる。
+
+---
+
+## 単体テストの導入
+
+```swift
+func testLoadUser() async {
+    await XCTContext.runActivityAsync(named: "成功") { _ in
+        let state: HomeViewState<UserService> = ...
+        
+        XCTAssertNil(state.user)
+        ...
+    }
+}
+```
+
+`loadUser` を呼び出す前は `user` が `nil` であることを確認する。
+
+---
+
+## 単体テストの導入
+
+```swift
+func testLoadUser() async {
+    await XCTContext.runActivityAsync(named: "成功") { _ in
+        ...
+        async let x: Void = state.loadUser()
+        UserService.currentUserContinuation!
+            .resume(returning: user)
+        await x
+        ...
+    }
+}
+```
+
+`loadUser` を呼び出し、 Continuation に結果を与える。
+
+---
+
+## 単体テストの導入
+
+```swift
+func testLoadUser() async {
+    await XCTContext.runActivityAsync(named: "成功") { _ in
+        ...
+        async let x: Void = state.loadUser()
+        await Task.sleep()
+        UserService.currentUserContinuation!
+            .resume(returning: user)
+        await x
+        ...
+    }
+```
+
+`loadUser` 経由で Continuation がセットされるまで要待機。
+
+---
+
+## ワンサイクルだけ待つ `Task.sleep`
+
+```swift
+extension Task where Success == Never, Failure == Never {
+    static func sleep() async {
+        await withCheckedContinuation { continuation in
+            Task<Void, Never> {
+                continuation.resume()
+            }
+        }
+    }
+}
+```
+
+標準では提供されていないので実装する。
+
+---
+
+## 単体テストの導入
+
+```swift
+func testLoadUser() async {
+    await XCTContext.runActivityAsync(named: "成功") { _ in
+        ...
+        await x
+        ...
+    }
+}
+```
+
+---
+
+## 単体テストの導入
+
+```swift
+func testLoadUser() async {
+    await XCTContext.runActivityAsync(named: "成功") { _ in
+        ...
+        await x
+        
+        XCTAssertEqual(state.user, user)
+    }
+}
+```
+
+`state.user` が `UserService` が返した `User` になっていることを確認する。
+
+---
+
+## 単体テストの導入
+
+```swift
+func testLoadUser() async {
+    await XCTContext.runActivityAsync(named: "成功") { _ in
+        await XCTContext.runActivityAsync(named:
+                "userが更新される") { _ in
+            ...
+        }
+        await XCTContext.runActivityAsync(named:
+                "ロード中はisLoadingUserがtrueになる") { _ in
+            ...
+        }
+```
+
+`user` だけでなく、 `isLoadingUser` もテストしたい。
+
+---
+
+## 単体テストの導入
+
+```swift
+await XCTContext.runActivityAsync(
+        named: "ロード中はisLoadingUserがtrueになる") { _ in
+    let state: HomeViewState<AuthService, UserService>
+        = ...
+    
+    XCTAssertFalse(state.isLoadingUser)
+    ...    
+}
+```
+
+`loadUser` を呼び出す前は `isLoadingUser` が `false` であることを確認する。
+
+---
+
+## 単体テストの導入
+
+```swift
+await XCTContext.runActivityAsync(
+        named: "ロード中はisLoadingUserがtrueになる") { _ in
+    ...
+    async let x: Void = state.loadUser()
+    await Task.sleep()
+    XCTAssertTrue(state.isLoadingUser)
+    UserService.currentUserContinuation!
+        .resume(returning: user)
+    await x
+    ...
+```
+
+ロード中は `isLoadingUser` が `true` であることを確認する。
+
+---
+
+## 単体テストの導入
+
+```swift
+await XCTContext.runActivityAsync(
+        named: "ロード中はisLoadingUserがtrueになる") { _ in
+    ...
+    UserService.currentUserContinuation!
+        .resume(returning: user)
+    await x
+    
+    XCTAssertFalse(state.isLoadingUser)
+}
+```
+
+ロードが完了すると `isLoadingUser` が `false` に戻る。
