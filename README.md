@@ -9,6 +9,7 @@
 - コードの見通しを良くする
     - View からロジックを分離
     - 状態遷移をわかりやすく
+    - 依存関係をわかりやすく
 - コードの品質を担保する
     - 単体テストの導入
 
@@ -38,6 +39,10 @@ struct HomeView: View {
 ```
 
 View の中に状態が記述されている。
+
+---
+
+## View からロジックを分離
 
 ---
 
@@ -153,4 +158,44 @@ public final class HomeViewState: ObservableObject {
 ```
 
 `user` は `@Published` なので、 `user` が更新されると `objectWillChange` が発火して View に反映される。
+
+---
+
+## View からロジックを分離 (After)
+
+```swift
+@MainActor
+public final class HomeViewState: ObservableObject {
+    ...
+    @Published public var presentsNetworkErrorAlert
+        : Bool　= false
+    ...
+}
+```
+
+`loadUser` のエラーハンドリングでネットワークエラーのアラートを表示する。
+
+---
+
+## View からロジックを分離 (After)
+
+```swift
+public func loadUser() async {
+    ...
+    do {
+        ...
+    } catch let error as NetworkError {
+        ...
+        presentsNetworkErrorAlert = true
+    } ...
+}
+```
+
+`loadUser` のエラーハンドリングでネットワークエラーのアラートを表示する。
+
+---
+
+## 状態遷移をわかりやすく
+
+---
 
