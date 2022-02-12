@@ -164,11 +164,83 @@ public final class HomeViewState: ObservableObject {
 ## View からロジックを分離 (After)
 
 ```swift
+struct HomeView: View {
+    ...
+    var body: some View {
+        ZStack {
+            ...
+        }
+        .task {
+            await state.loadUser()
+        }
+    }
+}
+```
+
+View から `state` の `loadUser` を呼び出す。
+
+---
+
+## View からロジックを分離 (After)
+
+```swift
+// リロードボタン
+Button {
+    Task {
+        await state.loadUser()
+    }
+} label: { ... }
+.disabled(state.isLoadingUser)
+```
+
+View から `state` の `loadUser` を呼び出す。
+
+---
+
+## View からロジックを分離 (After)
+
+```swift
 @MainActor
 public final class HomeViewState: ObservableObject {
     ...
-    @Published public var presentsNetworkErrorAlert
-        : Bool　= false
+    @Published public private(set)
+        var isLoadingUser: Bool = false
+    ...
+}
+```
+
+ロード中かどうかも `state` 側で制御する。
+
+---
+
+## View からロジックを分離 (After)
+
+```swift
+public func loadUser() async {
+    // 処理が二重に実行されるのを防ぐ。
+    if isLoadingUser { return }
+    // 処理中はリロードボタン押下を受け付けない。
+    isLoadingUser = true
+    defer {
+        // リロードボタン押下を再度受け付けるように。
+        isLoadingUser = false
+    }
+    ...
+}
+```
+
+ロード中かどうかも `state` 側で制御する。
+
+---
+
+## View からロジックを分離 (After)
+
+```swift
+@MainActor
+public final class HomeViewState: ObservableObject {
+    ...
+    @Published public
+        var presentsNetworkErrorAlert: Bool　= false
     ...
 }
 ```
