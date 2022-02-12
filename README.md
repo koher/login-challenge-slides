@@ -315,7 +315,7 @@ private enum LoadingUserState {
     ...
     mutating func startLoading() { ... }
     mutating func finishLoading() { ... }
-    mutating func failLoading(with error: Error) { ... }
+    mutating func failToLoad(with error: Error) { ... }
     mutating func clearError() { ... }
 }
 ```
