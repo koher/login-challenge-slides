@@ -527,4 +527,159 @@ let package = Package(
 
 ---
 
+## 依存関係をわかりやすく (After)
+
+```swift
+public protocol UserServiceProtocol {
+    static func currentUser() async throws -> User
+}
+```
+
+`UseCases` モジュールで `UserServiceProtocol` を宣言する。
+
+---
+
+## 依存関係をわかりやすく (Before)
+
+```swift
+import APIServices
+
+public final class HomeViewState: ObservableObject {
+    public func loadUser() async {
+        ...
+        let user = try await UserService.currentUser()
+        ...
+    }
+}
+```
+
+元々は `APIServices` モジュールに依存していた。
+
+---
+
+## 依存関係をわかりやすく (After)
+
+```swift
+public final class HomeViewState<UserService>:
+        ObservableObject
+        where UserService: UserServiceProtocol {
+    public func loadUser() async {
+        ...
+        let user = try await UserService.currentUser()
+        ...
+    }
+}
+```
+
+`HomeViewState` は注入された `UserService` を利用する形に。
+
+---
+
+## 依存関係をわかりやすく (Before)
+
+```swift
+let package = Package(
+    name: "UseCases",
+    ...
+    dependencies: [
+        .package(path: "../Entities"),
+        .package(path: "../APIServices"),
+        ...
+    ],
+    ...
+)
+```
+
+`UseCases` は元々 `APIServices` に依存していた。
+
+---
+
+## 依存関係をわかりやすく (After)
+
+```swift
+let package = Package(
+    name: "UseCases",
+    ...
+    dependencies: [
+        .package(path: "../Entities"),
+        ...
+    ],
+    ...
+)
+```
+
+`UseCases` の Package.swift から `APIServices` への依存を除去。
+
+---
+
+## 依存関係をわかりやすく (Before)
+
+```swift
+let package = Package(
+    name: "APIServices",
+    ...
+    dependencies: [
+        .package(path: "../Entities"),
+    ],
+    ...
+)
+```
+
+`APIServices` は元々 `Entities` だけに依存していた。
+
+---
+
+## 依存関係をわかりやすく (After)
+
+```swift
+let package = Package(
+    name: "APIServices",
+    ...
+    dependencies: [
+        .package(path: "../Entities"),
+        .package(path: "../UseCases"),
+    ],
+    ...
+)
+```
+
+`APIServices` を `UseCases` にも依存させる。
+
+---
+
+## 依存関係をわかりやすく (Before)
+
+```swift
+public enum UserService {
+    public static func currentUser()
+            async throws -> User {
+        ...
+    }
+}
+```
+
+---
+
+## 依存関係をわかりやすく (After)
+
+```swift
+public enum UserService: UserServiceProtocol {
+    public static func currentUser()
+            async throws -> User {
+        ...
+    }
+}
+```
+
+`UserService` を `UserServiceProtocol` に適合させる。
+
+---
+
+![fit](img/modules-3.png)
+
+---
+
+![fit](img/modules-4.png)
+
+---
 
